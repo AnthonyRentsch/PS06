@@ -1,6 +1,6 @@
 ---
 title: "STAT/MATH 495: Problem Set 06"
-author: "WRITE YOUR NAME HERE"
+author: "Anthony Rentsch"
 date: "2017-10-17"
 output:
   html_document:
@@ -22,17 +22,8 @@ set.seed(76)
 library(tidyverse)
 library(broom)
 library(knitr)
+library(gridExtra)
 ```
-
-
-
-
-
-# Collaboration
-
-Please indicate who you collaborated with on this assignment: 
-
-
 
 
 
@@ -95,25 +86,80 @@ n_sample <- 10000
 
 # Computation
 
-```{r}
-
+```{r, echo = FALSE}
+preds.2 <- data.frame()
+preds.99 <- data.frame()
 ```
+
+Loop through 10,000 random samples of points, train two models (one with $df = 2$ and one with $df = 99$), predict the value of f(x0), and record a value of f(x) + $\epsilon$. This creates two data frames with a row for every iteration, a predicted value, and a randomly generated "observed" value for f(x0).
+
+```{r}
+set.seed(176)
+
+i <- 1
+while(i <= n_sample){
+  data <- generate_sample(f = f, n = n, sigma = sigma)
+  
+  model.df2 <- smooth.spline(data$x, data$y, df = 2)
+  pred.2 <- predict(model.df2, test_set)
+  preds.2[i,1] <- pred.2$y
+  preds.2[i,2] <- (f(x0) + rnorm(n = 1, mean = 0, sd = sigma))
+    
+  model.df99 <- smooth.spline(data$x, data$y, df = 99)
+  pred.99 <- predict(model.df99, test_set)
+  preds.99[i,1] <- pred.99$y
+  preds.99[i,2] <- (f(x0) + rnorm(n = 1, mean = 0, sd = sigma))
+  
+  i = i +1
+}
+
+names(preds.2) <- c("estimate", "observed")
+names(preds.99) <- c("estimate", "observed")
+```
+
+Create functions to calculate MSE, bias, and variance.
+
+```{r}
+truth = f(x0)
+
+mse <- function(preds) mean((preds$estimate - preds$obs) ^ 2)
+
+bias_sq <- function(preds)  (mean(preds$estimate) - truth)^2
+  
+variance <- function(preds) mean((preds$estimate - mean(preds$estimate))^2)
+```
+
+
 
 
 # Tables
 
-As done in Lec 2.7, for both
 
-* An `lm` regression AKA a `smooth.splines(x, y, df=2)` model fit 
-* A `smooth.splines(x, y, df=99)` model fit 
+For the linear regression, i.e. `smooth.splines(x, y, df = 2)`:
 
-output tables comparing:
+```{r}
+data.frame(
+  "MSE" = mse(preds.2),
+  "bias_squared" = bias_sq(preds.2),
+  "variance" = variance(preds.2),
+  "irreducible" = sigma^2,
+  "sum" = bias_sq(preds.2) + variance(preds.2) + sigma^2
+) %>% 
+  knitr::kable(digits = 4)
+```
 
-|  MSE| bias_squared|   var| irreducible|   sum|
-|----:|------------:|-----:|-----------:|-----:|
-|     X|           X  |     X |      X |         X |
+For the `smooth.splines(x, y, df = 99)` model:
 
-where `sum = bias_squared + var + irreducible`. You can created cleanly formatted tables like the one above by piping a data frame into `knitr::kable(digits=4)`.
+```{r}
+data.frame(
+  "MSE" = mse(preds.99),
+  "bias_squared" = bias_sq(preds.99),
+  "variance" = variance(preds.99),
+  "irreducible" = sigma^2,
+  "sum" = bias_sq(preds.99) + variance(preds.99) + sigma^2
+) %>% 
+  knitr::kable(digits = 4)
+```
 
 
 
@@ -124,13 +170,12 @@ where `sum = bias_squared + var + irreducible`. You can created cleanly formatte
 
 1. Based on the topics covered in Lec 2.7, name one possible "sanity check" for your results. Name another if you can.
 1. In **two** sentences or less, give a rough sketch of what the procedure would
-be to get the breakdown of $$\mbox{MSE}\left[\widehat{f}(x)\right]$$ for *all*
-$x$ in this example, and not just for $$\mbox{MSE}\left[\widehat{f}(x_0)\right]
+be to get the breakdown of $$\mbox{MSE}\left[\widehat{f}(x)\right]$$ for *all* $x$ in this example, and not just for $$\mbox{MSE}\left[\widehat{f}(x_0)\right]
 = \mbox{MSE}\left[\widehat{f}(0.95)\right]$$.
 1. Which of the two models would you choose for predicting the point of interest and why?
 
 **Answers**:
 
-1.
-1.
-1.
+1. One possible sanity check would be to overlay each instance of each model, i.e., every `smooth.splines(x, y, df = 2)` and `smooth.splines(x, y, df = 99)`, over a scatterplot of the data and examine how much space exists between each instance of the model and how far off the model deviates from the data points. If what I see does not line up with what was presented in Lec 2.7, my work likely contains errors.
+1. I would follow the outline I created under the $Computation$ section, except that I would calculate the MSE not just for the point f(x0), but for all x in my sample of size $n$.
+1. While both models have their benefits, I would choose the the linear regression model, i.e., `smooth.splines(x, y, df = 2)`, for prediction. Even though the `smooth.splines(x, y, df = 99)` model predicts the correct value for $f(0.95)$ on average, the variation between resamples is so great that I do not feel confident that any particular model would produce an accurate estimate of the point of interest. On the other hand, a model with low variance will give a farily consistent prediction no matter what resample the model is trained on. Over time it may be possible to understand how the model's estimates become biased and to correct for this, something that would be more challenging to do for variance. Thus, I feel more confident that a slightly biased model would produce a prediction that could be adjusted over time. With this being said, selecting a model with a value for $df$ in the middle of these two is a better option.
